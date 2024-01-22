@@ -1,0 +1,28 @@
+---
+title: "toani"
+---
+
+This is a Quarto website.
+
+To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+
+```{r setup, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+library(data.table)
+library(here)
+```
+
+```{r load-data, echo=FALSE}
+oapen <- data.table::fread(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
+```
+
+```{r prepare-data}
+colnames(oapen) <- tolower(stringr::str_replace_all(colnames(oapen),"-","_"))
+
+toani_gold_standard <- oapen %>% select(uri,toani_score)
+oapen %<>% select(-toani_score)
+
+```
+
