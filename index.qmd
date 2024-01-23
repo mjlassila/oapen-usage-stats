@@ -16,13 +16,109 @@ library(here)
 
 ```{r load-data, echo=FALSE}
 oapen <- data.table::fread(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
+tup_thema <- data.table::fread("/Users/ccmala/Documents/2023/tup-books/tup-books-to-omp-thema.csv")
 ```
 
-```{r prepare-data}
+
+```{r clean-dataset}
+oapen[oapen == ""] <- NA 
 colnames(oapen) <- tolower(stringr::str_replace_all(colnames(oapen),"-","_"))
 
-toani_gold_standard <- oapen %>% select(uri,toani_score)
-oapen %<>% select(-toani_score)
+oapen_orig <- oapen
 
+oapen[oapen$language_simple == "720",]$q4 <- 720
+oapen[oapen$language_simple == "720"]$language_simple <- "Other"
+
+err_rows <- oapen %>% filter(classification=="Total_Item_Requests")
+
+oapen %<>% anti_join(err_rows, by="uri")
+oapen %<>% mutate(
+  total_2022 = as.numeric(total_2022))
+```
+```{r prepare-data}
+# Lets rename some fields
+
+oapen %<>% mutate(titles_in_lang_subject_grp = total) %>% select(-total)
+oapen %<>% mutate(
+  min = q0,
+  max = q4,
+  median = q2,
+  first_quantile = q1,
+  third_quantile = q3
+  ) %>%
+  select(
+    -q0,
+    -q1,
+    -q2,
+    -q3,
+    -q4)
+
+vars_to_select <- c(
+  "language_simple",
+  "titles_in_lang_subject_grp",
+  "min",
+  "max",
+  "median",
+  "first_quantile",
+  "third_quantile"
+)
+
+oapen_downloads_per_group <- oapen %>% select(all_of(vars_to_select),classification) %>% distinct_all
+
+toani_gold_standard <- oapen %>% select(uri,toani_score)
+oapen %<>% select(-all_of(vars_to_select)) %>% select(-toani_score)
+
+
+
+
+```
+
+
+
+```{r oapen-titles-by-language-and-subject}
+View(oapen %>% 
+  group_by(classification, language_simple) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    median_downloads = median(total_2022),
+    total_downloads = sum(total_2022)
+    ) %>% distinct_all)
+```
+```{r tup-comparison}
+
+tup_fin <- oapen %>% filter(publisher == "Tampere University Press", language == "Finnish")
+tup_eng <- oapen %>% filter(publisher == "Tampere University Press", language == "English")
+
+noasp_nor <- oapen %>% filter(publisher == "Cappelen Damm Akademisk/NOASP (Nordic Open Access Scholarly Publishing)",language!="English") 
+
+
+
+
+
+
+```
+
+
+```{r publishing-profile-noasp}
+View(noasp_nor %>% 
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    median_downloads = median(total_2022),
+    total_downloads = sum(total_2022)
+    ) %>% distinct_all)
+```
+
+```{r publishing-profile-tup}
+View(noasp_nor %>% 
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    median_downloads = median(total_2022),
+    total_downloads = sum(total_2022)
+    ) %>% distinct_all)
 ```
 
