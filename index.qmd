@@ -54,7 +54,6 @@ oapen %<>% mutate(
     -q4)
 
 vars_to_select <- c(
-  "language_simple",
   "titles_in_lang_subject_grp",
   "min",
   "max",
@@ -74,9 +73,17 @@ oapen %<>% select(-all_of(vars_to_select)) %>% select(-toani_score)
 ```
 
 
+Per subject group and language download data, using published
 
-```{r oapen-titles-by-language-and-subject}
-View(oapen %>% 
+```{r}
+knitr::kable(oapen_downloads_per_group)
+```
+
+
+
+Per subject group and language download data, using cleaned dataset
+```{r oapen-titles-by-language-and-subject, echo=FALSE, message=FALSE}
+knitr::kable(oapen %>% 
   group_by(classification, language_simple) %>%
   mutate(n = n()) %>%
   summarize(
@@ -85,6 +92,9 @@ View(oapen %>%
     total_downloads = sum(total_2022)
     ) %>% distinct_all)
 ```
+
+
+
 ```{r tup-comparison}
 
 tup_fin <- oapen %>% filter(publisher == "Tampere University Press", language == "Finnish")
@@ -100,23 +110,27 @@ noasp_nor <- oapen %>% filter(publisher == "Cappelen Damm Akademisk/NOASP (Nordi
 ```
 
 
-```{r publishing-profile-noasp}
-View(noasp_nor %>% 
+```{r publishing-profile-noasp, message=FALSE, echo=FALSE}
+knitr::kable(noasp_nor %>% 
   group_by(classification) %>%
   mutate(n = n()) %>%
   summarize(
     number_of_titles = n,
+    min = min(total_2022),
+    max = max(total_2022),
     median_downloads = median(total_2022),
     total_downloads = sum(total_2022)
     ) %>% distinct_all)
 ```
 
-```{r publishing-profile-tup}
-View(noasp_nor %>% 
+```{r publishing-profile-tup, message=FALSE, echo=FALSE}
+knitr::kable(tup_fin %>% 
   group_by(classification) %>%
   mutate(n = n()) %>%
   summarize(
     number_of_titles = n,
+    min = min(total_2022),
+    max = max(total_2022),
     median_downloads = median(total_2022),
     total_downloads = sum(total_2022)
     ) %>% distinct_all)
