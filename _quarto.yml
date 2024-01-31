@@ -2,7 +2,7 @@ project:
   type: website
 
 website:
-  title: "toani"
+  title: "TUP Usage Statistics"
   navbar:
     left:
       - href: index.qmd
