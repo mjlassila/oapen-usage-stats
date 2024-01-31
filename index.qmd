@@ -1,12 +1,13 @@
 ---
-title: "toani"
+title: "TUP usage statistics"
 ---
 
-This is a Quarto website.
+Reproduction of analysis published in Snijder, R., 2023. Measured in a context: making sense of open access book data. Insights: the UKSG journal, 36(1), p.20. [https://doi.org/10.1629/uksg.627](https://doi.org/10.1629/uksg.627)
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
 
-```{r setup, echo=FALSE}
+Data downloaded from [https://doi.org/10.5281/zenodo.7799222](https://doi.org/10.5281/zenodo.7799222).
+
+```{r setup, echo=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(magrittr)
@@ -14,13 +15,23 @@ library(data.table)
 library(here)
 ```
 
-```{r load-data, echo=FALSE}
+```{r load-data, echo=FALSE, message=FALSE}
 oapen <- data.table::fread(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
+
+```
+
+```{r tup_data, echo=FALSE, message=FALSE}
+tup_2020 <- data.table::fread(here::here("data","tampere-university-press-202001-202012.csv"))
+tup_2021 <- data.table::fread(here::here("data","tampere-university-press-202101-202112.csv"))
+tup_2022 <- data.table::fread(here::here("data","tampere-university-press-202201-202212.csv"))
+tup_2023 <- data.table::fread(here::here("data","tampere-university-press-202301-202312.csv"))
+
 tup_thema <- data.table::fread("/Users/ccmala/Documents/2023/tup-books/tup-books-to-omp-thema.csv")
 ```
 
 
-```{r clean-dataset}
+
+```{r clean-oapen-dataset, echo=FALSE}
 oapen[oapen == ""] <- NA 
 colnames(oapen) <- tolower(stringr::str_replace_all(colnames(oapen),"-","_"))
 
@@ -35,11 +46,13 @@ oapen %<>% anti_join(err_rows, by="uri")
 oapen %<>% mutate(
   total_2022 = as.numeric(total_2022))
 ```
-```{r prepare-data}
+
+```{r prepare-data, echo=FALSE}
 # Lets rename some fields
 
 oapen %<>% mutate(titles_in_lang_subject_grp = total) %>% select(-total)
 oapen %<>% mutate(
+  id = stringr::str_replace(uri,"library.oapen.org/handle/",""),
   min = q0,
   max = q4,
   median = q2,
@@ -72,16 +85,60 @@ oapen %<>% select(-all_of(vars_to_select)) %>% select(-toani_score)
 
 ```
 
+```{r clean-tup-data, echo=FALSE}
 
-Per subject group and language download data, using published
+tup_columns <- c("id","total")
 
-```{r}
-knitr::kable(oapen_downloads_per_group)
+
+tup_2020 %<>% select(all_of(tup_columns)) %>% mutate(year=2020)
+tup_2021 %<>% select(all_of(tup_columns)) %>% mutate(year=2021)
+tup_2022 %<>% select(all_of(tup_columns)) %>% mutate(year=2022)
+tup_2023 %<>% select(all_of(tup_columns)) %>% mutate(year=2023)
+
+tup_downloads <- bind_rows(
+  tup_2020,
+  tup_2021,
+  tup_2022,
+  tup_2023
+)
+
+tup_downloads %<>% inner_join(oapen %>% select(id,classification), by="id")
+
+```
+
+```{r tables-setup, echo = FALSE}
+col_headers <- c(
+  "Subject",
+  "N",
+  "Min",
+  "Max",
+  "Median downloads",
+  "Total downloads"
+)
+
+
+```
+
+
+## Data from Snijder, R., 2023
+
+```{r oapen-downloads-published-data, echo=FALSE}
+oapen_downloads_per_group %<>% relocate(classification,titles_in_lang_subject_grp,min,max,median)
+
+knitr::kable(
+  oapen_downloads_per_group %>% 
+    select(
+      -first_quantile,
+      -third_quantile),
+  #col.names = col_headers,
+  caption = "OAPEN Library titles by language and subject",
+  col.names = c("Subject","N","Min","Max","Median")
+  
+  )
 ```
 
 
 
-Per subject group and language download data, using cleaned dataset
 ```{r oapen-titles-by-language-and-subject, echo=FALSE, message=FALSE}
 knitr::kable(oapen %>% 
   group_by(classification, language_simple) %>%
@@ -90,18 +147,23 @@ knitr::kable(oapen %>%
     number_of_titles = n,
     median_downloads = median(total_2022),
     total_downloads = sum(total_2022)
-    ) %>% distinct_all)
+    ) %>% distinct_all,
+    col.names = c("Subject","Language","N","Median","Total"),
+    caption = "OAPEN Library titles by language and subject, using cleaned dataset")
+
 ```
 
 
 
-```{r tup-comparison}
+```{r tup-comparison, echo = FALSE}
 
 tup_fin <- oapen %>% filter(publisher == "Tampere University Press", language == "Finnish")
 tup_eng <- oapen %>% filter(publisher == "Tampere University Press", language == "English")
 
-noasp_nor <- oapen %>% filter(publisher == "Cappelen Damm Akademisk/NOASP (Nordic Open Access Scholarly Publishing)",language!="English") 
-
+noasp_nor <- oapen %>% 
+  filter(
+    publisher == "Cappelen Damm Akademisk/NOASP (Nordic Open Access Scholarly Publishing)",
+    language != "English") 
 
 
 
@@ -109,6 +171,9 @@ noasp_nor <- oapen %>% filter(publisher == "Cappelen Damm Akademisk/NOASP (Nordi
 
 ```
 
+## Comparing publishers
+
+Published OAPEN data: [Cappelen Damm Akademisk/NOASP](https://press.nordicopenaccess.no/index.php/noasp) 2022
 
 ```{r publishing-profile-noasp, message=FALSE, echo=FALSE}
 knitr::kable(noasp_nor %>% 
@@ -120,10 +185,15 @@ knitr::kable(noasp_nor %>%
     max = max(total_2022),
     median_downloads = median(total_2022),
     total_downloads = sum(total_2022)
-    ) %>% distinct_all)
+    ) %>% distinct_all,
+    col.names = col_headers,
+    caption = "Year 2022 downloads per subject group, items published by NOASP")
 ```
 
-```{r publishing-profile-tup, message=FALSE, echo=FALSE}
+
+Published OAPEN data: Tampere University Press 2022
+
+```{r publishing-profile-tup-published-data, message=FALSE, echo=FALSE}
 knitr::kable(tup_fin %>% 
   group_by(classification) %>%
   mutate(n = n()) %>%
@@ -133,6 +203,81 @@ knitr::kable(tup_fin %>%
     max = max(total_2022),
     median_downloads = median(total_2022),
     total_downloads = sum(total_2022)
-    ) %>% distinct_all)
+    ) %>% distinct_all,
+    col.names = col_headers,
+    caption = "Year 2022 downloads per subject group, items published by TUP")
 ```
+
+## Data from publisher statistics dashboard
+
+```{r publishing-profile-tup-2020, message=FALSE, echo=FALSE}
+knitr::kable(tup_downloads %>% 
+  filter(year == 2020) %>%
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    min = min(total),
+    max = max(total),
+    median_downloads = median(total),
+    total_downloads = sum(total)
+    ) %>% distinct_all,
+    col.names = col_headers,
+    caption = "Year 2020 downloads per subject group, items published by TUP")
+```
+
+
+```{r publishing-profile-tup-2021, message=FALSE, echo=FALSE}
+knitr::kable(tup_downloads %>% 
+  filter(year == 2021) %>%
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    min = min(total),
+    max = max(total),
+    median_downloads = median(total),
+    total_downloads = sum(total)
+    ) %>% distinct_all,
+    col.names = col_headers,
+    caption = "Year 2021 downloads per subject group, items published by TUP")
+```
+
+
+```{r publishing-profile-tup-2022, message=FALSE, echo=FALSE}
+knitr::kable(tup_downloads %>% 
+  filter(year == 2022) %>%
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    min = min(total),
+    max = max(total),
+    median_downloads = median(total),
+    total_downloads = sum(total)
+    ) %>% distinct_all,
+    col.names = col_headers,
+    caption = "Year 2021 downloads per subject group, items published by TUP")
+```
+
+
+```{r publishing-profile-tup-2023, message=FALSE, echo=FALSE}
+knitr::kable(tup_downloads %>% 
+  filter(year == 2023) %>%
+  group_by(classification) %>%
+  mutate(n = n()) %>%
+  summarize(
+    number_of_titles = n,
+    min = min(total),
+    max = max(total),
+    median_downloads = median(total),
+    total_downloads = sum(total)
+    ) %>% distinct_all,
+  col.names = col_headers,
+  caption = "Year 2023 downloads per subject group, items published by TUP")
+```
+
+
+
+
 
