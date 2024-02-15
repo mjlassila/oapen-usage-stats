@@ -6,6 +6,8 @@ date-modified: last-modified
 
 Reproduction of analysis published in Snijder, R., 2023. Measured in a context: making sense of open access book data. Insights: the UKSG journal, 36(1), p.20. <https://doi.org/10.1629/uksg.627>
 
+Source code available at <https://github.com/mjlassila/oapen-usage-stats>.
+
 Data downloaded from <https://doi.org/10.5281/zenodo.7799222>.
 
 ```{r}
@@ -19,6 +21,7 @@ library(magrittr)
 library(data.table)
 library(here)
 library(stringr)
+library(tools)
 ```
 
 ```{r}
@@ -26,7 +29,8 @@ library(stringr)
 #| echo: false
 #| message: false
 oapen <- data.table::fread(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
-
+checksum <- tools::md5sum(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
+zenodo_checksum = "8bf03d2b43a55e3c9f0ca13ddb60f218"
 ```
 
 ```{r}
@@ -54,7 +58,7 @@ colnames(oapen) <- tolower(stringr::str_replace_all(colnames(oapen),"-","_"))
 
 # Overview of the data
 
-Let's create some basic descriptive tables to check the structure of the data. Having read the article, we know the range of values variables should have.
+Let's create some basic descriptive tables to check the structure of the data. Based on result tables published in the article, we know the range of values variables should have.
 
 Variable `language_simple` should have values *English*, *German* and *Other.* so there should be three rows in the resulting dataset when summarizing the data by `language_simple`. It seems that there might be errors in the data, because the summary table has `r nrow(oapen %>% group_by(language_simple) %>% count %>% arrange(-n))` rows.
 
@@ -262,7 +266,6 @@ It might be interesting to make comparisons between publishers with similar publ
 Published OAPEN data for [Cappelen Damm Akademisk/NOASP](https://press.nordicopenaccess.no/index.php/noasp) 2022
 
 ```{r}
-
 #| label: publishing-profile-noasp
 #| echo: false
 #| message: false
