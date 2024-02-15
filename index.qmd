@@ -1,26 +1,39 @@
 ---
-title: "TUP usage statistics"
+title: "OAPEN usage statistics"
+author: matti.lassila@tuni.fi
+date-modified: last-modified
 ---
 
-Reproduction of analysis published in Snijder, R., 2023. Measured in a context: making sense of open access book data. Insights: the UKSG journal, 36(1), p.20. [https://doi.org/10.1629/uksg.627](https://doi.org/10.1629/uksg.627)
+Reproduction of analysis published in Snijder, R., 2023. Measured in a context: making sense of open access book data. Insights: the UKSG journal, 36(1), p.20. <https://doi.org/10.1629/uksg.627>
 
+Data downloaded from <https://doi.org/10.5281/zenodo.7799222>.
 
-Data downloaded from [https://doi.org/10.5281/zenodo.7799222](https://doi.org/10.5281/zenodo.7799222).
+```{r}
+#| label: setup
+#| echo: false
+#| message: false
 
-```{r setup, echo=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(magrittr)
 library(data.table)
 library(here)
+library(stringr)
 ```
 
-```{r load-data, echo=FALSE, message=FALSE}
+```{r}
+#| label: load_oapen_data
+#| echo: false
+#| message: false
 oapen <- data.table::fread(here::here('data','TOANI_data_OAPEN Library_202201-202212.csv'))
 
 ```
 
-```{r tup_data, echo=FALSE, message=FALSE}
+```{r}
+#| label: load_tup_data
+#| echo: false
+#| message: false
+
 tup_2020 <- data.table::fread(here::here("data","tampere-university-press-202001-202012.csv"))
 tup_2021 <- data.table::fread(here::here("data","tampere-university-press-202101-202112.csv"))
 tup_2022 <- data.table::fread(here::here("data","tampere-university-press-202201-202212.csv"))
@@ -29,26 +42,87 @@ tup_2023 <- data.table::fread(here::here("data","tampere-university-press-202301
 tup_thema <- data.table::fread("/Users/ccmala/Documents/2023/tup-books/tup-books-to-omp-thema.csv")
 ```
 
+```{r}
+#| label: clean_oapen_data
+#| echo: false
+#| message: false
 
-
-```{r clean-oapen-dataset, echo=FALSE}
 oapen[oapen == ""] <- NA 
 colnames(oapen) <- tolower(stringr::str_replace_all(colnames(oapen),"-","_"))
 
-oapen_orig <- oapen
-
-oapen[oapen$language_simple == "720",]$q4 <- 720
-oapen[oapen$language_simple == "720"]$language_simple <- "Other"
-
-err_rows <- oapen %>% filter(classification=="Total_Item_Requests")
-
-oapen %<>% anti_join(err_rows, by="uri")
-oapen %<>% mutate(
-  total_2022 = as.numeric(total_2022))
 ```
 
-```{r prepare-data, echo=FALSE}
-# Lets rename some fields
+# Overview of the data
+
+Let's create some basic descriptive tables to check the structure of the data. Having read the article, we know the range of values variables should have.
+
+Variable `language_simple` should have values *English*, *German* and *Other.* so there should be three rows in the resulting dataset when summarizing the data by `language_simple`. It seems that there might be errors in the data, because the summary table has `r nrow(oapen %>% group_by(language_simple) %>% count %>% arrange(-n))` rows.
+
+Let's glimpse how `language_simple` looks like.
+
+```{r}
+#| label: language_simple_table
+#| echo: false
+#| message: false
+
+knitr::kable(
+  oapen %>% group_by(language_simple) %>% count %>% arrange(-n) %>% ungroup %>% slice_head(n = 10))
+```
+
+Apparently some rows have erroneus values at least in `language_simple` variable.
+
+Classification (eg. general subject of the publication) variable should have 13 possible values
+
+```{r}
+#| label: classification_table
+#| echo: false
+#| message: false
+
+knitr::kable(
+  oapen %>% group_by(classification) %>% count)
+```
+
+Surprisingly, there is value *Total_Item_Requests* in the midst of actual classification codes.
+
+```{r}
+#| label: fix-data
+#| echo: false
+#| message: false
+
+oapen_orig <- oapen
+
+oapen %<>% filter(language_simple %in% c("English","German","Other"))
+oapen %<>% filter(classification!="Total_Item_Requests")
+
+err_rows <- oapen_orig %>% anti_join(oapen, by="uri")
+
+oapen %<>% mutate(
+  total_2022 = as.numeric(total_2022))
+
+```
+
+Let's see how the erroneous rows look like. In total, `r nrow(err_rows)` rows might have erroneous data.
+
+```{r}
+#| label: table_erroneus_data
+#| echo: false
+#| message: false
+
+knitr::kable(
+  err_rows %>% select(title,doi,total_2022,classification,language_simple) %>% 
+    filter(!is.na(total_2022)) %>%
+     sample_n(10),
+    #col.names = c("Subject","Language","N","Median","Total"),
+    caption = "Sample of erroneous dataset rows")
+
+```
+
+It seems that in erroneus rows, variable `total_2022` seems to have information which looks like funding data or is empty and `language_simple` has numerical information.
+
+```{r}
+#| label: prepare_data
+#| echo: false
+#| message: false
 
 oapen %<>% mutate(titles_in_lang_subject_grp = total) %>% select(-total)
 oapen %<>% mutate(
@@ -68,6 +142,7 @@ oapen %<>% mutate(
 
 vars_to_select <- c(
   "titles_in_lang_subject_grp",
+  "language_simple",
   "min",
   "max",
   "median",
@@ -80,12 +155,21 @@ oapen_downloads_per_group <- oapen %>% select(all_of(vars_to_select),classificat
 toani_gold_standard <- oapen %>% select(uri,toani_score)
 oapen %<>% select(-all_of(vars_to_select)) %>% select(-toani_score)
 
-
-
+oapen$language_simple <- NA
+oapen %<>% mutate(
+  language_simple = case_when(
+    language == "English" ~ "English", 
+    language == "German" ~ "German",
+    language != "English" & language !="German" ~ "Other"
+    )
+  )
 
 ```
 
-```{r clean-tup-data, echo=FALSE}
+```{r}
+#| label: clean_tup_data
+#| echo: false
+#| message: false
 
 tup_columns <- c("id","total")
 
@@ -106,7 +190,11 @@ tup_downloads %<>% inner_join(oapen %>% select(id,classification), by="id")
 
 ```
 
-```{r tables-setup, echo = FALSE}
+```{r}
+#| label: tables_setup
+#| echo: false
+#| message: false
+
 col_headers <- c(
   "Subject",
   "N",
@@ -119,43 +207,39 @@ col_headers <- c(
 
 ```
 
-
 ## Data from Snijder, R., 2023
 
-```{r oapen-downloads-published-data, echo=FALSE}
-oapen_downloads_per_group %<>% relocate(classification,titles_in_lang_subject_grp,min,max,median)
+```{r}
+#| label: table_oapen_downloads_cleaned_data
+#| echo: true
+#| message: false
 
-knitr::kable(
-  oapen_downloads_per_group %>% 
-    select(
-      -first_quantile,
-      -third_quantile),
-  #col.names = col_headers,
-  caption = "OAPEN Library titles by language and subject",
-  col.names = c("Subject","N","Min","Max","Median")
-  
+oapen_downloads_per_group %<>% relocate(classification,language_simple,titles_in_lang_subject_grp,min,max,median)
+
+
+  knitr::kable(
+    oapen %>%
+      group_by(classification, language_simple) %>%
+      mutate(n = n()) %>%
+      reframe(
+        number_of_titles = n,
+        median_downloads = median(total_2022),
+      ) %>% distinct_all,
+    col.names = c("Subject", "Language", "N", "Median"),
+    caption = "OAPEN Library titles by language and subject, calculated using cleaned dataset"
   )
-```
-
-
-
-```{r oapen-titles-by-language-and-subject, echo=FALSE, message=FALSE}
-knitr::kable(oapen %>% 
-  group_by(classification, language_simple) %>%
-  mutate(n = n()) %>%
-  summarize(
-    number_of_titles = n,
-    median_downloads = median(total_2022),
-    total_downloads = sum(total_2022)
-    ) %>% distinct_all,
-    col.names = c("Subject","Language","N","Median","Total"),
-    caption = "OAPEN Library titles by language and subject, using cleaned dataset")
 
 ```
 
+Comparing results calculated using cleaned data to [Table 1](https://insights.uksg.org/articles/10.1629/uksg.627#T1) of the published article it seems that erroneous rows (n=`r nrow(err_rows)`) belong to the *C Language + English language* and *J Society & social sciences + Other language* -groups.
 
+In the [Table 1](https://insights.uksg.org/articles/10.1629/uksg.627#T1) of published article there are 636 published titles in the *C Language + English language* grouping and 720 titles in the in the *J Society & social sciences + Other language* group and in tables created using data cleaned from errors, there are none.
 
-```{r tup-comparison, echo = FALSE}
+```{r}
+#| label: tup-comparison
+#| echo: false
+#| message: false
+#| warning: false
 
 tup_fin <- oapen %>% filter(publisher == "Tampere University Press", language == "Finnish")
 tup_eng <- oapen %>% filter(publisher == "Tampere University Press", language == "English")
@@ -173,13 +257,21 @@ noasp_nor <- oapen %>%
 
 ## Comparing publishers
 
-Published OAPEN data: [Cappelen Damm Akademisk/NOASP](https://press.nordicopenaccess.no/index.php/noasp) 2022
+It might be interesting to make comparisons between publishers with similar publishing profiles.
 
-```{r publishing-profile-noasp, message=FALSE, echo=FALSE}
+Published OAPEN data for [Cappelen Damm Akademisk/NOASP](https://press.nordicopenaccess.no/index.php/noasp) 2022
+
+```{r}
+
+#| label: publishing-profile-noasp
+#| echo: false
+#| message: false
+
+
 knitr::kable(noasp_nor %>% 
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total_2022),
     max = max(total_2022),
@@ -190,14 +282,18 @@ knitr::kable(noasp_nor %>%
     caption = "Year 2022 downloads per subject group, items published by NOASP")
 ```
 
-
 Published OAPEN data: Tampere University Press 2022
 
-```{r publishing-profile-tup-published-data, message=FALSE, echo=FALSE}
+```{r}
+#| label: publishing-profile-tup-published-data
+#| echo: false
+#| message: false
+#| warning: false
+
 knitr::kable(tup_fin %>% 
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total_2022),
     max = max(total_2022),
@@ -210,12 +306,19 @@ knitr::kable(tup_fin %>%
 
 ## Data from publisher statistics dashboard
 
-```{r publishing-profile-tup-2020, message=FALSE, echo=FALSE}
+Let's create comparison statistics for Tampere University Press using data downloaded from OAPEN publisher statistics dashboard.
+
+```{r}
+#| label: publishing-profile-tup-2020
+#| echo: false
+#| message: false
+#| warning: false
+
 knitr::kable(tup_downloads %>% 
   filter(year == 2020) %>%
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total),
     max = max(total),
@@ -226,13 +329,17 @@ knitr::kable(tup_downloads %>%
     caption = "Year 2020 downloads per subject group, items published by TUP")
 ```
 
+```{r}
+#| label: publishing-profile-tup-2021
+#| echo: false
+#| message: false
+#| warning: false
 
-```{r publishing-profile-tup-2021, message=FALSE, echo=FALSE}
 knitr::kable(tup_downloads %>% 
   filter(year == 2021) %>%
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total),
     max = max(total),
@@ -243,13 +350,18 @@ knitr::kable(tup_downloads %>%
     caption = "Year 2021 downloads per subject group, items published by TUP")
 ```
 
+```{r}
+#| label: publishing-profile-tup-2022
+#| echo: false
+#| message: false
+#| warning: false
 
-```{r publishing-profile-tup-2022, message=FALSE, echo=FALSE}
+
 knitr::kable(tup_downloads %>% 
   filter(year == 2022) %>%
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total),
     max = max(total),
@@ -260,13 +372,17 @@ knitr::kable(tup_downloads %>%
     caption = "Year 2021 downloads per subject group, items published by TUP")
 ```
 
+```{r}
+#| label: publishing-profile-tup-2023
+#| echo: false
+#| message: false
+#| warning: false
 
-```{r publishing-profile-tup-2023, message=FALSE, echo=FALSE}
 knitr::kable(tup_downloads %>% 
   filter(year == 2023) %>%
   group_by(classification) %>%
   mutate(n = n()) %>%
-  summarize(
+  reframe(
     number_of_titles = n,
     min = min(total),
     max = max(total),
@@ -276,8 +392,3 @@ knitr::kable(tup_downloads %>%
   col.names = col_headers,
   caption = "Year 2023 downloads per subject group, items published by TUP")
 ```
-
-
-
-
-
