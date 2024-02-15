@@ -372,7 +372,7 @@ knitr::kable(tup_downloads %>%
     total_downloads = sum(total)
     ) %>% distinct_all,
     col.names = col_headers,
-    caption = "Year 2021 downloads per subject group, items published by TUP")
+    caption = "Year 2022 downloads per subject group, items published by TUP")
 ```
 
 ```{r}
